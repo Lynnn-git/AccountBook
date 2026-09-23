@@ -1,0 +1,16 @@
+{
+  "name": "记账本",
+  "short_name": "记账本",
+  "description": "本地记账本，支持账单截图OCR识别，数据不出设备",
+  "start_url": "./记账本.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F6FA",
+  "theme_color": "#6C63FF",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

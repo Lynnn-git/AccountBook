@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="记账本">
+<meta name="theme-color" content="#6C63FF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<title>记账本</title>
+<script src="lib/tesseract.min.js"></script>
+<script src="lib/html2canvas.min.js"></script>
+<style>
+:root {
+  --primary: #6C63FF;
+  --primary-dark: #5A52D5;
+  --primary-light: #E8E5FF;
+  --accent: #FF6584;
+  --bg: #F5F6FA;
+  --card-bg: #FFFFFF;
+  --text-main: #2D2D3F;
+  --text-sub: #9E9EB3;
+  --text-time: #B8B8CC;
+  --border: #EEEDF5;
+  --shadow: 0 2px 8px rgba(108,99,255,0.06);
+  --shadow-hover: 0 4px 16px rgba(108,99,255,0.12);
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text-main);
+  -webkit-tap-highlight-color: transparent;
+  min-height: 100vh;
+}
+
+body { padding-bottom: 40px; }
+
+/* 顶部栏 */
+.header {
+  background: linear-gradient(135deg, #6C63FF, #8B80FF);
+  color: white;
+  padding: 20px 20px 16px;
+  border-radius: 0 0 24px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(108,99,255,0.15);
+}
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.header h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+.header .total-box {
+  text-align: right;
+}
+.header .total-label {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.header .total-amount {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+/* 统计卡 */
+.stats-bar {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px 4px;
+}
+.stat-item {
+  flex: 1;
+  text-align: center;
+  padding: 12px 4px;
+  background: var(--card-bg);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+.stat-item .num {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.stat-item .label {
+  font-size: 10px;
+  color: var(--text-sub);
+  margin-top: 3px;
+}
+
+/* 操作区 */
+.action-row {
+  display: flex;
+  gap: 10px;
+  margin: 12px 16px 4px;
+}
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 13px 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.action-btn.upload {
+  background: var(--primary);
+  color: white;
+}
+.action-btn.upload:active { background: var(--primary-dark); }
+.action-btn.upload:disabled { opacity: 0.4; }
+.action-btn.save {
+  background: var(--card-bg);
+  color: var(--primary);
+  border: 1.5px solid var(--primary-light);
+}
+.action-btn.save:active { background: var(--primary-light); }
+.action-btn.save:disabled { opacity: 0.4; }
+.upload-hint {
+  font-size: 11px;
+  color: var(--text-sub);
+  text-align: center;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+/* OCR 进度 */
+.ocr-progress {
+  display: none;
+  margin: 12px 16px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 24px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.ocr-progress.active { display: block; }
+.ocr-progress .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--primary-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  margin: 0 auto 12px;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.ocr-progress .text { font-size: 13px; color: var(--text-sub); }
+.ocr-progress .bar {
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 14px;
+  overflow: hidden;
+}
+.ocr-progress .bar-fill {
+  height: 100%;
+  background: var(--primary);
+  width: 0%;
+  transition: width 0.3s;
+  border-radius: 2px;
+}
+
+/* OCR 结果预览 */
+.ocr-result {
+  display: none;
+  margin: 12px 16px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.ocr-result.active { display: block; }
+.ocr-result h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-main); }
+.ocr-result .raw-text {
+  font-size: 11px;
+  color: var(--text-sub);
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background: var(--bg);
+  padding: 10px;
+  border-radius: 8px;
+  line-height: 1.6;
+}
+.ocr-result .actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ocr-result .actions button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-confirm { background: var(--primary); color: white; }
+.btn-cancel { background: var(--bg); color: var(--text-sub); }
+
+/* 支出列表 */
+.expense-list {
+  margin: 16px 16px 4px;
+}
+.expense-list .list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+.expense-list .list-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.expense-list .list-header .count {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-left: auto;
+  margin-right: 10px;
+}
+.sort-btn {
+  border: 1px solid var(--primary-light);
+  background: var(--card-bg);
+  color: var(--primary);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.sort-btn:active { background: var(--primary-light); }
+.expense-item {
+  display: flex;
+  align-items: center;
+  background: var(--card-bg);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+  gap: 12px;
+  transition: box-shadow 0.2s;
+}
+.expense-item:active { box-shadow: var(--shadow-hover); }
+.expense-item.editing { background: #FFFAF0; border: 1.5px solid var(--primary-light); }
+.expense-item .info {
+  flex: 1;
+  min-width: 0;
+}
+.expense-item .merchant {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-main);
+}
+.expense-item .meta {
+  font-size: 11px;
+  color: var(--text-time);
+  margin-top: 3px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.expense-item .meta .tag-refund {
+  color: #FF9800;
+  background: #FFF8E1;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+.expense-item .amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+.expense-item .actions {
+  display: flex;
+  gap: 2px;
+}
+.expense-item .actions button {
+  border: none;
+  background: transparent;
+  padding: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.expense-item .actions .btn-edit { color: var(--primary); }
+.expense-item .actions .btn-edit:active { background: var(--primary-light); }
+.expense-item .actions .btn-del { color: var(--accent); }
+.expense-item .actions .btn-del:active { background: #FFE0E8; }
+
+/* 编辑模式输入框 */
+.edit-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  margin-top: 4px;
+  background: var(--card-bg);
+  outline: none;
+}
+.edit-input:focus { border-color: var(--primary); }
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 50px 20px;
+  color: var(--text-sub);
+}
+.empty-state .icon { font-size: 42px; opacity: 0.25; }
+.empty-state p { font-size: 13px; margin-top: 10px; }
+
+/* 手动添加 */
+.manual-add {
+  margin: 12px 16px 4px;
+}
+.manual-add-btn {
+  width: 100%;
+  padding: 12px;
+  border: 1.5px dashed var(--primary-light);
+  background: transparent;
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.manual-add-btn:active { background: var(--primary-light); }
+.manual-add-form {
+  display: none;
+  background: var(--card-bg);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-top: 8px;
+  box-shadow: var(--shadow);
+}
+.manual-add-form.active { display: block; }
+.manual-add-form .row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.manual-add-form .row:last-child { margin-bottom: 0; }
+.manual-add-form input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+}
+.manual-add-form input:focus { border-color: var(--primary); }
+.manual-add-form .btn-add {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.manual-add-form .amount-input { flex: 0 0 100px; width: 100px; }
+.manual-add-form .date-input { flex: 0 0 140px; width: 140px; }
+
+/* 窄屏：商户名占一行，金额/日期/按钮占一行 */
+@media (max-width: 420px) {
+  .manual-add-form .row { flex-wrap: wrap; }
+  .manual-add-form .row input { min-width: 0; }
+  .manual-add-form #manualMerchant { flex: 1 1 100%; width: 100%; }
+  .manual-add-form .amount-input { flex: 0 0 88px; width: 88px; }
+  .manual-add-form .date-input { flex: 1 1 110px; width: auto; }
+  .manual-add-form .btn-add { flex-shrink: 0; }
+}
+
+/* Toast 提示 */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(45,45,63,0.85);
+  color: white;
+  padding: 10px 24px;
+  border-radius: 22px;
+  font-size: 13px;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+.toast.show { opacity: 1; }
+
+/* 预览图 */
+.preview-img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+/* 切换显示已剔除项 */
+.toggle-skipped {
+  font-size: 12px;
+  color: var(--text-sub);
+  text-align: center;
+  margin: 10px 0;
+  cursor: pointer;
+}
+.skipped-list {
+  display: none;
+  margin: 0 16px 12px;
+  background: #FFF8E1;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.skipped-list.active { display: block; }
+.skipped-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(0,0,0,0.06);
+  font-size: 13px;
+  color: var(--text-sub);
+}
+.skipped-item:last-child { border-bottom: none; }
+.skipped-item .reason {
+  font-size: 10px;
+  color: var(--accent);
+  background: #FFE0E8;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-row">
+    <h1>记账本</h1>
+    <div class="total-box">
+      <div class="total-label">总支出</div>
+      <div class="total-amount" id="totalAmount">¥0.00</div>
+    </div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="num" id="statCount">0</div>
+    <div class="label">支出笔数</div>
+  </div>
+  <div class="stat-item">
+    <div class="num" id="statAvg">0.00</div>
+    <div class="label">平均每笔</div>
+  </div>
+  <div class="stat-item">
+    <div class="num" id="statSkipped">0</div>
+    <div class="label">已剔除交通</div>
+  </div>
+</div>
+
+<div class="action-row">
+  <button class="action-btn upload" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+    拍照 / 选择账单图片
+  </button>
+  <button class="action-btn save" id="saveBtn" onclick="saveAsImage()" style="display:none">
+    保存账单
+  </button>
+</div>
+<div class="upload-hint">支持支付宝、微信账单截图，可多选，本地OCR识别</div>
+<input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+
+<div class="ocr-progress" id="ocrProgress">
+  <div class="spinner"></div>
+  <div class="text" id="ocrText">正在识别中...</div>
+  <div class="bar"><div class="bar-fill" id="ocrBar"></div></div>
+  <img class="preview-img" id="previewImg" style="display:none">
+</div>
+
+<div class="ocr-result" id="ocrResult">
+  <h3>识别结果预览</h3>
+  <div class="raw-text" id="rawText"></div>
+  <div id="parsedPreview"></div>
+  <div class="actions">
+    <button class="btn-confirm" onclick="confirmImport()">导入到列表</button>
+    <button class="btn-cancel" onclick="cancelImport()">取消</button>
+  </div>
+</div>
+
+<div class="manual-add">
+  <button class="manual-add-btn" onclick="toggleManualAdd()">+ 手动添加支出</button>
+  <div class="manual-add-form" id="manualAddForm">
+    <div class="row">
+      <input type="text" id="manualMerchant" placeholder="商户名称">
+      <input type="number" id="manualAmount" placeholder="金额" class="amount-input">
+      <input type="date" id="manualDate" class="date-input">
+      <button class="btn-add" onclick="manualAdd()">添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="expense-list">
+  <div class="list-header">
+    <h3>支出明细</h3>
+    <span class="count" id="listCount"></span>
+    <button class="sort-btn" id="sortBtn" onclick="toggleSort()">金额排序</button>
+  </div>
+  <div id="expenseList"></div>
+</div>
+
+<div class="toggle-skipped" id="toggleSkipped" style="display:none" onclick="toggleSkippedList()">
+  查看/隐藏已剔除项
+</div>
+<div class="skipped-list" id="skippedList"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== 数据存储 ====================
+var DB = {
+  expenses: [],
+  skipped: [],
+};
+
+var lastParsedItems = [];
+var ocrImageData = null;
+var sortOrder = null; // null=原始顺序, 'desc'=倒序, 'asc'=升序
+
+// ==================== 公共交通关键词 ====================
+var TRANSPORT_KEYWORDS = [
+  { pattern: /公交|巴士|bus/i, reason: '公交车' },
+  { pattern: /地铁|轨道交通|metro|subway/i, reason: '地铁' },
+  { pattern: /美团单车|哈啰|哈罗|摩拜|青桔|共享单车|单车|骑行卡|骑行/i, reason: '共享单车' },
+];
+
+function matchTransport(merchant) {
+  if (!merchant) return null;
+  for (var i = 0; i < TRANSPORT_KEYWORDS.length; i++) {
+    if (TRANSPORT_KEYWORDS[i].pattern.test(merchant)) {
+      return TRANSPORT_KEYWORDS[i].reason;
+    }
+  }
+  return null;
+}
+
+// ==================== OCR 识别（支持多图） ====================
+var ocrWorker = null;
+
+function handleFileSelect(evt) {
+  var files = evt.target.files;
+  if (!files || files.length === 0) return;
+
+  var fileArray = [];
+  for (var i = 0; i < files.length; i++) {
+    fileArray.push(files[i]);
+  }
+
+  document.getElementById('ocrProgress').classList.add('active');
+  document.getElementById('ocrResult').classList.remove('active');
+  document.getElementById('uploadBtn').disabled = true;
+  document.getElementById('ocrText').textContent = fileArray.length > 1
+    ? '正在识别 ' + fileArray.length + ' 张图片...'
+    : '正在初始化识别引擎...';
+  document.getElementById('ocrBar').style.width = '0%';
+
+  var allParsedItems = [];
+  var allRefundEntries = [];
+
+  recognizeFilesSequentially(fileArray, 0, allParsedItems, allRefundEntries).then(function() {
+    // 先处理退款匹配（用退款收入项匹配并剔除对应支出项）
+    applyRefundMatching(allParsedItems, allRefundEntries);
+    // 再剔除标记了「已全额退款」但没有被退款匹配命中的支出项
+    for (var i = allParsedItems.length - 1; i >= 0; i--) {
+      if (allParsedItems[i].fullRefundFlag) {
+        allParsedItems.splice(i, 1);
+      }
+    }
+
+    lastParsedItems = allParsedItems;
+    renderParsedPreview(lastParsedItems);
+
+    document.getElementById('ocrProgress').classList.remove('active');
+    document.getElementById('ocrResult').classList.add('active');
+    cleanupOcrImage();
+  }).catch(function(err) {
+    document.getElementById('ocrText').textContent = '识别失败：' + err.message;
+    showToast('识别失败，请重试');
+    setTimeout(function() {
+      document.getElementById('ocrProgress').classList.remove('active');
+    }, 2000);
+  }).then(function() {
+    if (ocrWorker) {
+      ocrWorker.terminate();
+      ocrWorker = null;
+    }
+    document.getElementById('uploadBtn').disabled = false;
+  });
+
+  evt.target.value = '';
+}
+
+// ==================== Canvas 图片预处理（提升 OCR 精度） ====================
+function preprocessImage(file) {
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() {
+      URL.revokeObjectURL(img.src); // 释放内存
+      // 放大3倍，保留彩色（灰度化会丢失黄色"+"号等彩色文字），限制最大宽度3500px
+      var scale = img.width < 1300 ? 3 : 2;
+      var w = Math.round(img.width * scale);
+      var h = Math.round(img.height * scale);
+      if (w > 3500) { h = Math.round(h * 3500 / w); w = 3500; }
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      // 使用平滑缩放放大
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, w, h);
+      // 不做灰度化，保留彩色（微信/支付宝账单中黄色"+"号收入金额在灰度化后会丢失）
+      // 仅做轻度对比度增强，让文字更清晰
+      var imageData = ctx.getImageData(0, 0, w, h);
+      var data = imageData.data;
+      var contrast = 1.15;
+      for (var i = 0; i < data.length; i += 4) {
+        data[i]     = (data[i]     - 128) * contrast + 128;
+        data[i + 1] = (data[i + 1] - 128) * contrast + 128;
+        data[i + 2] = (data[i + 2] - 128) * contrast + 128;
+        if (data[i] < 0) data[i] = 0; else if (data[i] > 255) data[i] = 255;
+        if (data[i + 1] < 0) data[i + 1] = 0; else if (data[i + 1] > 255) data[i + 1] = 255;
+        if (data[i + 2] < 0) data[i + 2] = 0; else if (data[i + 2] > 255) data[i + 2] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas);
+    };
+    img.onerror = function() { reject(new Error('图片加载失败')); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function recognizeFilesSequentially(files, index, allItems, allRefunds) {
+  if (index >= files.length) return Promise.resolve();
+
+  var file = files[index];
+  var progressBase = Math.round((index / files.length) * 100);
+  var progressEnd = Math.round(((index + 1) / files.length) * 100);
+
+  if (files.length > 1) {
+    document.getElementById('ocrText').textContent = '正在识别第 ' + (index + 1) + '/' + files.length + ' 张...';
+    document.getElementById('ocrBar').style.width = progressBase + '%';
+  } else {
+    document.getElementById('ocrText').textContent = '正在预处理图片...';
+  }
+
+  var workerPromise;
+  if (ocrWorker) {
+    workerPromise = Promise.resolve(ocrWorker);
+  } else {
+    workerPromise = Tesseract.createWorker('chi_sim+eng', 1, {
+      workerPath: 'lib/worker.min.js',
+      corePath: 'lib/tesseract-core.wasm.js',
+      langPath: 'lang',
+      logger: function(m) {
+        if (m.status === 'recognizing text') {
+          var pct = progressBase + Math.round(m.progress * (progressEnd - progressBase));
+          var prefix = files.length > 1 ? '第' + (index + 1) + '/' + files.length + '张 ' : '';
+          document.getElementById('ocrText').textContent = prefix + '正在识别... ' + pct + '%';
+          document.getElementById('ocrBar').style.width = pct + '%';
+        }
+      }
+    }).then(function(w) {
+      ocrWorker = w;
+      return w;
+    });
+  }
+
+  return workerPromise.then(function(worker) {
+    document.getElementById('ocrText').textContent = files.length > 1
+      ? '正在预处理第 ' + (index + 1) + '/' + files.length + ' 张...'
+      : '正在预处理图片...';
+    return preprocessImage(file).then(function(canvas) {
+      var prefix = files.length > 1 ? '第' + (index + 1) + '/' + files.length + '张 ' : '';
+      document.getElementById('ocrText').textContent = prefix + '正在识别...';
+      return worker.recognize(canvas).then(function(result) {
+        var rawText = preprocessOcrText(result.data.text);
+        var parsed = parseExpensesWithRefunds(rawText);
+        // 如果默认 PSM 3 没识别到任何金额项，自动切换 PSM 11（稀疏文本）重试
+        if (parsed.items.length === 0 && parsed.refunds.length === 0) {
+          document.getElementById('ocrText').textContent = prefix + '尝试增强识别...';
+          return worker.setParameters({ tessedit_pageseg_mode: '11' }).then(function() {
+            return worker.recognize(canvas);
+          }).then(function(result2) {
+            // 恢复默认 PSM
+            return worker.setParameters({ tessedit_pageseg_mode: '3' }).then(function() {
+              return result2;
+            });
+          }).then(function(result2) {
+            rawText = preprocessOcrText(result2.data.text);
+            parsed = parseExpensesWithRefunds(rawText);
+            return { rawText: rawText, parsed: parsed };
+          }).catch(function() {
+            // PSM 11 失败则用原始结果
+            return { rawText: rawText, parsed: parsed };
+          });
+        }
+        return { rawText: rawText, parsed: parsed };
+      });
+    });
+  }).then(function(res) {
+    var rawText = res.rawText;
+    var parsed = res.parsed;
+    for (var i = 0; i < parsed.items.length; i++) {
+      allItems.push(parsed.items[i]);
+    }
+    for (var i = 0; i < parsed.refunds.length; i++) {
+      allRefunds.push(parsed.refunds[i]);
+    }
+    if (index === 0) {
+      document.getElementById('rawText').textContent = rawText;
+    } else {
+      document.getElementById('rawText').textContent += '\n--- 第' + (index + 1) + '张 ---\n' + rawText;
+    }
+    return recognizeFilesSequentially(files, index + 1, allItems, allRefunds);
+  });
+}
+
+function applyRefundMatching(items, refundEntries) {
+  for (var r = 0; r < refundEntries.length; r++) {
+    var refund = refundEntries[r];
+    // 找出所有金额匹配且商户名匹配的候选支出项
+    var candidates = [];
+    for (var t = items.length - 1; t >= 0; t--) {
+      if (items[t].amount === refund.amount) {
+        var m1 = cleanMerchantName(items[t].merchant);
+        var m2 = cleanMerchantName(refund.merchant);
+        if (m1 && m2 && (m1.indexOf(m2) >= 0 || m2.indexOf(m1) >= 0 || merchantSimilar(m1, m2))) {
+          candidates.push(t);
+        }
+      }
+    }
+    if (candidates.length === 0) continue;
+    if (candidates.length === 1) {
+      // 只有一个匹配项，直接剔除
+      items.splice(candidates[0], 1);
+      continue;
+    }
+    // 多个匹配项：优先剔除已标有「已全额退款」的项；其次优先剔除与退款时间最接近的项
+    var hasFullRefundIdx = -1;
+    for (var c = 0; c < candidates.length; c++) {
+      if (items[candidates[c]].fullRefundFlag) {
+        hasFullRefundIdx = candidates[c];
+        break;
+      }
+    }
+    if (hasFullRefundIdx >= 0) {
+      items.splice(hasFullRefundIdx, 1);
+      continue;
+    }
+    // 按时间接近度选择：提取退款时间的日期数字，与支出项日期比较
+    var refundDayMatch = refund.date ? refund.date.match(/(\d{1,2})\s*月\s*(\d{1,2})/) || refund.date.match(/(\d{1,2})[-.](\d{1,2})/) : null;
+    var refundDay = refundDayMatch ? parseInt(refundDayMatch[2], 10) : -1;
+    var bestIdx = candidates[0];
+    var bestDiff = Infinity;
+    for (var c = 0; c < candidates.length; c++) {
+      var itemDayMatch = items[candidates[c]].date ? items[candidates[c]].date.match(/(\d{1,2})\s*月\s*(\d{1,2})/) || items[candidates[c]].date.match(/(\d{1,2})[-.](\d{1,2})/) : null;
+      var itemDay = itemDayMatch ? parseInt(itemDayMatch[2], 10) : -1;
+      var diff = (refundDay > 0 && itemDay > 0) ? Math.abs(refundDay - itemDay) : Infinity;
+      // 如果有时间信息且相差不超过1天，优先选这个；否则选第一个（日期最早的）
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = candidates[c];
+      }
+    }
+    items.splice(bestIdx, 1);
+  }
+}
+
+function cleanupOcrImage() {
+  document.getElementById('previewImg').src = '';
+  document.getElementById('previewImg').style.display = 'none';
+  ocrImageData = null;
+}
+
+// ==================== OCR 文本预处理 ====================
+function preprocessOcrText(text) {
+  var lines = text.split('\n');
+  var result = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    // 1. 去掉中文字符之间的空格（OCR常见问题：阳 朔 双 河 → 阳朔双河）
+    line = line.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2');
+    // 多次执行，处理连续多个中文间空格
+    line = line.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2');
+    line = line.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2');
+    // 2. 修复金额：把 "298 00" → "298.00"（¥/￥/+/-后跟2位以上数字+空格+2位数字的情况）
+    // 注意：不能用全局规则，否则 "1 18" 会被误改成 "1.18"
+    line = line.replace(/([¥￥])\s*(\d{2,})\s+(\d{2})\s*$/g, '$1$2.$3');
+    line = line.replace(/([+\-])\s*(\d{2,})\s+(\d{2})\s*$/g, '$1$2.$3');
+    // 2b. 修复 "298 .00" → "298.00"（OCR有时在小数点前插入空格）
+    line = line.replace(/(\d)\s+([.,])(\d{1,2})\s*$/g, '$1$2$3');
+    // 2c. 修复 "+298 .00" → "+298.00"（+号后数字与.之间空格）
+    line = line.replace(/([+\-])\s*(\d+)\s+\.\s*(\d{1,2})\s*$/g, '$1$2.$3');
+    // 2d. 修复 OCR 把 ¥ 识别为 Y/y 的情况：前面是数字或行首的 Y/y 后跟数字 → ¥
+    line = line.replace(/(?:^|\s)Y(\d)/g, ' ¥$1');
+    line = line.replace(/(?:^|\s)y(\d)/g, ' ¥$1');
+    // 3. 修复 "退 .，" → "退款" 等OCR碎片
+    line = line.replace(/退\s*[.，,。]\s*/, '退款');
+    // 4. 去掉中文和数字之间的多余空格
+    line = line.replace(/([\u4e00-\u9fa5])\s+(-?\d)/g, '$1 $2');
+    line = line.replace(/(\d)\s+([\u4e00-\u9fa5])/g, '$1 $2');
+    // 5. 合并同一内容的多个空格为单个
+    line = line.replace(/ {2,}/g, ' ');
+    line = line.trim();
+    result.push(line);
+  }
+  // 6. 后处理：PSM 11 稀疏文本模式会把所有内容放在一行，导致 ¥金额 在行中间。
+  // 需要把行中间的 ¥金额 拆分成独立行，让 solo amount 逻辑能正确处理。
+  // 匹配：中文/文字 ¥数字（整数或带小数），后面还有其他文字的情况
+  var finalResult = [];
+  for (var fi = 0; fi < result.length; fi++) {
+    var fline = result[fi];
+    // 检查是否一行内同时有中文和 ¥金额，且金额不在行末
+    var amtInLine = fline.match(/¥\s*(\d+(?:[.,]\d{1,2})?)/);
+    if (amtInLine && fline.length > amtInLine[0].length + 5) {
+      // 金额后面还有其他文字 → 拆分
+      var amtIdx = fline.indexOf(amtInLine[0]);
+      var beforeAmt = fline.substring(0, amtIdx).trim();
+      var afterAmt = fline.substring(amtIdx + amtInLine[0].length).trim();
+      if (beforeAmt) finalResult.push(beforeAmt);
+      finalResult.push(amtInLine[0].replace(/\s+/g, ''));
+      if (afterAmt) finalResult.push(afterAmt);
+    } else {
+      finalResult.push(fline);
+    }
+  }
+  return finalResult.join('\n');
+}
+
+// ==================== 时间提取 ====================
+function extractTime(str) {
+  var m = str.match(/\d{1,2}\s*月\s*\d{1,2}\s*日\s+\d{1,2}:\d{2}/);
+  if (m) return m[0];
+  m = str.match(/\d{1,2}[-.]\d{1,2}\s+\d{1,2}:\d{2}/);
+  if (m) return m[0];
+  m = str.match(/\d{4}[-.]\d{1,2}[-.]\d{1,2}\s+\d{1,2}:\d{2}/);
+  if (m) return m[0];
+  m = str.match(/\d{1,2}\s*月\s*\d{1,2}\s*日/);
+  if (m) return m[0];
+  return null;
+}
+
+// ==================== 解析支出项 ====================
+function parseExpensesWithRefunds(rawText) {
+  var lines = rawText.split('\n');
+  var items = [];
+  var refundEntries = [];
+  var idCounter = Date.now() + Math.floor(Math.random() * 100000);
+
+  var SKIP_KEYWORDS = [
+    /支出\s*[¥￥]?\s*\d/, /收入\s*[¥￥]?\s*\d/, /收支统计/,
+    /全部账单/, /查找交易/, /退还/, /红包.*领/,
+    /转账.*收到/, /收款/, /余额/, /代付/,
+    /摘要/, /交易类型/, /账单/, /合计/,
+    /小计/, /总计/, /\d{4}\s*年\s*\d{1,2}\s*月/,
+  ];
+
+  var FINANCE_KEYWORDS = [
+    /理财/i, /基金/, /余额宝/, /招财宝/, /零钱通/,
+    /定期存款/, /活期/, /申购/, /赎回/, /买入/,
+    /卖出/, /持仓/, /分红/, /收益/, /利息/,
+    /转入.*理财/, /理财.*转出/, /货币基金/, /股票/,
+    /证券.*交易/, /国债/, /黄金.*买入/, /黄金.*卖出/,
+    /保险.*理财/, /存入.*理财/, /取出.*理财/,
+    /天弘/, /易方达/, /广发基金/, /华夏基金/,
+    /南方基金/, /嘉实基金/, /招商理财/, /陆金所/,
+    /度小满/, /零钱理财/, /工资理财/, /活期理财/,
+    /定期理财/, /稳赢/, /稳健.*理财/, /鹏华/,
+    /博时/, /汇添富/, /建信/, /中欧/, /兴全/, /交银/, /万家/,
+  ];
+
+  var FULL_REFUND = /已全额退款|全额退/;
+  var PARTIAL_REFUND = /部分退款|已退款|退款\d/;
+
+  // 记录上一行的时间信息（微信账单中时间常在商户名的下一行）
+  var pendingTime = '';
+
+  // 预扫描：判断是否为带符号账单（金额前有 + 或 - 号）
+  // 带符号账单：-号=支出(统计)，+号或无符号=收入(不统计)
+  // 无符号账单：所有金额都视为支出(全部统计)
+  var hasSymbol = false;
+  for (var si = 0; si < lines.length; si++) {
+    var sline = lines[si].trim();
+    if (!sline) continue;
+    // + 号后跟金额（收入标记，+号在账单中极少误匹配）
+    if (/\+\s*[¥￥]?\s*\d/.test(sline)) { hasSymbol = true; break; }
+    // - 号后跟带小数点的金额（支出标记，要求小数点避免误匹配日期如9-16）
+    if (/[-]\s*[¥￥]?\s*\d+[.,]\d{1,2}\s*$/.test(sline)) { hasSymbol = true; break; }
+  }
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+
+    var nextLines = '';
+    for (var k = 1; k <= 2 && (i + k) < lines.length; k++) {
+      nextLines += ' ' + lines[i + k].trim();
+    }
+
+    var hasFullRefund = FULL_REFUND.test(line);
+    var hasPartialRefund = PARTIAL_REFUND.test(line);
+    // 检查紧接的下一行是否是"已全额退款"（且不含金额，是纯状态描述行）
+    if (!hasFullRefund && (i + 1) < lines.length) {
+      var nextLine = lines[i + 1].trim();
+      if (FULL_REFUND.test(nextLine) && !/\d+[.,]\d{1,2}/.test(nextLine)) {
+        hasFullRefund = true;
+      }
+    }
+    if (!hasPartialRefund && (i + 1) < lines.length) {
+      var nextLineP = lines[i + 1].trim();
+      if (PARTIAL_REFUND.test(nextLineP) && !/\d+[.,]\d{1,2}/.test(nextLineP)) {
+        hasPartialRefund = true;
+      }
+    }
+
+    // 1. 跳过含收入/统计等关键词的行
+    var skipLine = false;
+    for (var j = 0; j < SKIP_KEYWORDS.length; j++) {
+      if (SKIP_KEYWORDS[j].test(line)) { skipLine = true; break; }
+    }
+    if (skipLine) { pendingTime = ''; continue; }
+
+    // 2. 跳过收入项
+    if (/\+/.test(line) && /[¥￥]?\s*\d+[.,]\d{1,2}\s*$/.test(line)) {
+      var refundMatch = line.match(/[¥￥]?\s*(\d+[.,]\d{1,2})\s*$/);
+      if (refundMatch) {
+        var refundAmount = parseFloat(refundMatch[1].replace(',', '.'));
+        var refundMerchant = line
+          .replace(/[¥￥]?\s*\d+[.,]\d{1,2}\s*$/, '')
+          .replace(/退款|退还/g, '')
+          .replace(/[¥￥\+\-]/g, '')
+          .replace(/\d{2}:\d{2}(:\d{2})?/g, '')
+          .replace(/\d{4}-\d{2}-\d{2}/g, '')
+          .replace(/^[，,。.、\s]+/, '')
+          .replace(/[，,。.、\s]+$/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (refundMerchant && refundAmount > 0) {
+          var refundTime = pendingTime || '';
+          if (!refundTime && (i + 1) < lines.length) {
+            var nextLineRaw = lines[i + 1].trim();
+            var nextTime = extractTime(nextLineRaw);
+            if (nextTime && !/\d+[.,]\d{1,2}\s*$/.test(nextLineRaw)) {
+              refundTime = nextTime;
+            }
+          }
+          refundEntries.push({ merchant: refundMerchant, amount: refundAmount, date: refundTime });
+        }
+      }
+      pendingTime = '';
+      continue;
+    }
+
+    // 3. 含"退款"但没有+号和金额的行 → 尝试从上下行找金额作为退货行
+    if (/退款/.test(line) && !/\+/.test(line) && !/\d+[.,]\d{1,2}/.test(line)) {
+      // 从下一行找金额
+      var refundAmtFromNext = null;
+      for (var ni = i + 1; ni < lines.length && ni <= i + 3; ni++) {
+        var nline = lines[ni].trim();
+        if (!nline) continue;
+        // 跳过含+号的行（会被收入项逻辑处理，避免重复计算）
+        if (/\+/.test(nline)) break;
+        var nfMatch = nline.match(/[¥￥]?\s*(\d+[.,]\d{1,2})\s*$/);
+        if (nfMatch) {
+          refundAmtFromNext = parseFloat(nfMatch[1].replace(',', '.'));
+          break;
+        }
+      }
+      if (refundAmtFromNext && refundAmtFromNext > 0) {
+        var refundMerchant3 = line
+          .replace(/退款|退还/g, '')
+          .replace(/[¥￥\+\-]/g, '')
+          .replace(/^[，,。.、\s]+/, '')
+          .replace(/[，,。.、\s]+$/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (refundMerchant3) {
+          refundEntries.push({ merchant: refundMerchant3, amount: refundAmtFromNext, date: '' });
+        }
+      }
+      pendingTime = '';
+      continue;
+    }
+
+    // 3b. 跳过含"退款"且带 + 的行（已被上面的逻辑或收入项逻辑处理）
+    if (/退款/i.test(line) && /\+/.test(line)) { pendingTime = ''; continue; }
+
+    // 4. 尝试提取金额（同行模式要求带小数点，避免把序号/张数误认为金额）
+    // 先判断是否是纯金额行（只有 ¥/数字/空格），如果是则跳过同行金额提取，交给 solo amount 逻辑
+    var isSoloAmountLine = /^[¥￥Yy]?\s*\d/.test(line) && !/[\u4e00-\u9fa5]/.test(line);
+    var amountMatch = null;
+    if (!isSoloAmountLine) {
+      // 带符号模式：仅匹配 - 号前缀的金额作为支出（+号或无符号=收入，不统计）
+      // 无符号模式：所有金额都视为支出（保持原逻辑）
+      amountMatch = line.match(/[-]\s*[¥￥]?\s*(\d+[.,]\d{1,2})\s*$/);
+      if (!amountMatch && !hasSymbol) {
+        amountMatch = line.match(/[¥￥Yy]\s*(\d+[.,]\d{1,2})\s*$/);
+        if (!amountMatch) amountMatch = line.match(/(\d+[.,]\d{1,2})\s*$/);
+      }
+    }
+
+    if (amountMatch) {
+      var amountStr = amountMatch[1].replace(',', '.');
+      var amount = parseFloat(amountStr);
+      if (isNaN(amount) || amount < 0.01 || amount > 100000) { pendingTime = ''; continue; }
+
+      // 提取商户名
+      var merchant = line
+        .replace(/(\d+[.,]\d{1,2})\s*$/, '')
+        .replace(/^[-\s]*/, '')
+        .replace(/[¥￥\+\-]/g, '')
+        .replace(/\d{4}-\d{2}-\d{2}/g, '')
+        .replace(/\d{2}:\d{2}(:\d{2})?/g, '')
+        .replace(/^[，,。.、\s]+/, '')
+        .replace(/[，,。.、\s]+$/, '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[<>\d.]+\s*/, '')
+        .trim();
+
+      if (!merchant || /^\d+$/.test(merchant)) { pendingTime = ''; continue; }
+      if (/退款.*\+|退还|收款|红包.*领|代付/.test(merchant)) { pendingTime = ''; continue; }
+
+      // 理财类跳过
+      var isFinance = false;
+      for (var f = 0; f < FINANCE_KEYWORDS.length; f++) {
+        if (FINANCE_KEYWORDS[f].test(merchant) || FINANCE_KEYWORDS[f].test(line)) { isFinance = true; break; }
+      }
+      if (isFinance) { pendingTime = ''; continue; }
+
+      // 全额退款：不直接跳过，先打标记，交给退款匹配逻辑处理（避免同商户同金额误剔）
+      // 如果 OCR 能识别出「已全额退款」文字则打标记；如果没有则靠退款匹配逻辑处理
+      var fullRefundFlag = hasFullRefund;
+
+      // 消费时间：优先用 pendingTime（时间在商户行之前），其次看下一行（微信格式时间在商户行之后），最后从当前行内提取
+      var consumeTime = pendingTime || '';
+      if (!consumeTime && (i + 1) < lines.length) {
+        var nextLineRaw = lines[i + 1].trim();
+        var nextTime = extractTime(nextLineRaw);
+        if (nextTime && !/\d+[.,]\d{1,2}\s*$/.test(nextLineRaw)) {
+          consumeTime = nextTime;
+          i++; // 跳过下一行（已作为时间行消费）
+        }
+      }
+      if (!consumeTime) {
+        consumeTime = extractTime(line) || '';
+      }
+
+      items.push({
+        id: ++idCounter,
+        merchant: merchant,
+        amount: amount,
+        date: consumeTime,
+        source: 'ocr',
+        refundStatus: hasPartialRefund ? 'partial' : null,
+        fullRefundFlag: fullRefundFlag
+      });
+
+      pendingTime = '';
+    } else {
+      // 没有金额 - 检查是否为时间行，保存供后续商户行使用
+      var lineTime = extractTime(line);
+      if (lineTime) {
+        pendingTime = lineTime;
+      }
+      // 检查是否是「金额单独一行」的格式（如微信卡券订单详情）
+      // 特征：整行只有 ¥金额 或 金额，没有其他中文文字
+      // 注意：OCR可能把"¥118"拆成"¥1"和"18"两行，或同一行"¥1 18"
+      var soloAmountStr = '';
+      var soloLineIdx = i;
+      // 先尝试同行：¥118 或 ¥1 18（同行被空格拆开）
+      var m1 = line.match(/^[¥￥Yy]?\s*(\d+(?:[.,]\d{1,2})?)\s*$/);
+      if (!m1) {
+        // 尝试 ¥1 18 → 118（同行被空格拆开且未带小数点）
+        var m1b = line.match(/^[¥￥]?\s*(\d+)\s+(\d{1,2})\s*$/);
+        if (m1b) {
+          m1 = [m1b[0], m1b[1] + m1b[2]];
+        }
+      }
+      if (m1) {
+        soloAmountStr = m1[1];
+        // 检查下一行是否是纯数字（被OCR拆分的金额后半部分）
+        if ((i + 1) < lines.length) {
+          var nextNum = lines[i + 1].trim().match(/^(\d{1,2})\s*$/);
+          if (nextNum && !soloAmountStr.match(/[.,]\d{1,2}$/)) {
+            soloAmountStr = soloAmountStr + nextNum[1];
+            soloLineIdx = i + 1; // 标记已消费下一行
+          }
+        }
+      }
+      if (soloAmountStr) {
+        // 带符号模式下，无 - 号的独立金额行视为收入，跳过
+        if (hasSymbol) { pendingTime = ''; continue; }
+        var soloAmount = parseFloat(soloAmountStr.replace(',', '.'));
+        // 向上查找最近的非空行作为商户名
+        if (!isNaN(soloAmount) && soloAmount >= 0.01 && soloAmount <= 9999) {
+          var soloMerchant = '';
+          var soloTime = pendingTime || '';
+          for (var pi = i - 1; pi >= 0; pi--) {
+            var prevLine = lines[pi].trim();
+            if (!prevLine || /^\d+$/.test(prevLine)) continue;
+            // 跳过不含中文字符的行（如"2 Khy -"等英文/数字噪点行）
+            if (!/[\u4e00-\u9fa5]/.test(prevLine)) continue;
+            // 跳过纯数字、纯标点、时间行
+            if (extractTime(prevLine)) { soloTime = soloTime || extractTime(prevLine); continue; }
+            // 跳过 SKIP_KEYWORDS 命中的行
+            var prevSkip = false;
+            for (var sj = 0; sj < SKIP_KEYWORDS.length; sj++) {
+              if (SKIP_KEYWORDS[sj].test(prevLine)) { prevSkip = true; break; }
+            }
+            if (prevSkip) continue;
+            // 跳过含+号的行（收入项）
+            if (/\+/.test(prevLine)) continue;
+            // 跳过退货行
+            if (/退款|退还/.test(prevLine)) continue;
+            // 提取商户名
+            var pm = prevLine
+              .replace(/[\-—–·•|]/g, ' ')
+              .replace(/\[.*?\]/g, '')
+              .replace(/（.*?）/g, '')
+              .replace(/\(.*?\)/g, '')
+              .replace(/[¥￥\+\-]/g, '')
+              .replace(/\d{2}:\d{2}(:\d{2})?/g, '')
+              .replace(/\d{4}-\d{2}-\d{2}/g, '')
+              .replace(/^[，,。.、\s]+/, '')
+              .replace(/[，,。.、\s]+$/, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            // 去掉末尾的状态描述（如"门票已使用"、"已使用"、"已完成"等）
+            pm = pm.replace(/已使用|已完成|已取消|已退款|待使用|待确认|待付款|门票.*$/, '').trim();
+            // 去掉"张数:1"之类的信息
+            pm = pm.replace(/张数.*$/, '').trim();
+            // 跳过清理后为空或纯数字的行
+            if (!pm || /^\d+$/.test(pm)) continue;
+            // 跳过中文占比太低的行（如"5 天"TREN:1"等噪点行）
+            // 要求清理后的商户名中至少有2个中文字符
+            var chineseChars = pm.match(/[\u4e00-\u9fa5]/g);
+            if (!chineseChars || chineseChars.length < 2) continue;
+            if (pm.length >= 2) {
+              soloMerchant = pm;
+              break;
+            }
+          }
+          if (soloMerchant) {
+            // 检查理财类
+            var soloFinance = false;
+            for (var sf = 0; sf < FINANCE_KEYWORDS.length; sf++) {
+              if (FINANCE_KEYWORDS[sf].test(soloMerchant)) { soloFinance = true; break; }
+            }
+            if (!soloFinance) {
+              items.push({
+                id: ++idCounter,
+                merchant: soloMerchant,
+                amount: soloAmount,
+                date: soloTime,
+                source: 'ocr',
+                refundStatus: null,
+                fullRefundFlag: false
+              });
+              // 如果拼接了下一行，跳过它
+              if (soloLineIdx > i) {
+                i = soloLineIdx;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return { items: items, refunds: refundEntries };
+}
+
+// 清理OCR产生的乱码前缀和后缀，提取核心商户名
+function cleanMerchantName(name) {
+  if (!name) return '';
+  var cleaned = name
+    .replace(/退款|退还|支付|交易/g, '')
+    .replace(/[a-zA-Z]{1,4}/g, function(m) {
+      return m.length >= 5 ? m : '';
+    })
+    .replace(/^[^\u4e00-\u9fa5]+/, '') // 去掉开头的非中文部分
+    .replace(/[^\u4e00-\u9fa5A-Za-z0-9]+/g, '') // 去掉所有标点符号和特殊字符
+    .replace(/\s+/g, '')
+    .trim();
+  return cleaned;
+}
+
+// 商户名相似度判断
+function merchantSimilar(name1, name2) {
+  if (!name1 || !name2) return false;
+  var clean1 = name1.replace(/退款|退还|支付|交易/g, '');
+  var clean2 = name2.replace(/退款|退还|支付|交易/g, '');
+  if (!clean1 || !clean2) return false;
+  if (clean1.length >= 2 && clean2.indexOf(clean1) >= 0) return true;
+  if (clean2.length >= 2 && clean1.indexOf(clean2) >= 0) return true;
+  if (clean1.length >= 2 && clean2.length >= 2 && clean1.substring(0, 2) === clean2.substring(0, 2)) return true;
+  // 公共子串匹配：找4字以上公共子串
+  if (commonSubstring(clean1, clean2, 4)) return true;
+  return false;
+}
+
+// 查找公共子串（最少 minLen 个连续字符）
+function commonSubstring(s1, s2, minLen) {
+  if (!s1 || !s2 || s1.length < minLen || s2.length < minLen) return false;
+  for (var i = 0; i <= s1.length - minLen; i++) {
+    var sub = s1.substring(i, i + minLen);
+    if (s2.indexOf(sub) >= 0) return true;
+  }
+  return false;
+}
+
+// ==================== 预览解析结果 ====================
+function renderParsedPreview(items) {
+  var html = '';
+  var skippedCount = 0;
+  var refundCount = 0;
+
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var transport = matchTransport(item.merchant);
+    if (transport) {
+      skippedCount++;
+      html += '<div style="opacity:0.45;text-decoration:line-through;padding:4px 0;font-size:13px;color:#9E9EB3;">';
+      html += item.merchant + ' ¥' + item.amount.toFixed(2);
+      if (item.date) html += ' <span style="font-size:11px;">' + item.date + '</span>';
+      html += ' <span style="color:#FF6584;font-size:11px;">[' + transport + ']</span>';
+      html += '</div>';
+    } else if (item.refundStatus === 'partial') {
+      refundCount++;
+      html += '<div style="padding:4px 0;font-size:13px;">';
+      html += item.merchant + ' ¥' + item.amount.toFixed(2);
+      if (item.date) html += ' <span style="font-size:11px;color:#B8B8CC;">' + item.date + '</span>';
+      html += ' <span style="color:#FF9800;font-size:11px;background:#FFF8E1;padding:1px 6px;border-radius:3px;">[部分退款]</span>';
+      html += '</div>';
+    } else {
+      html += '<div style="padding:4px 0;font-size:13px;">';
+      html += item.merchant + ' ¥' + item.amount.toFixed(2);
+      if (item.date) html += ' <span style="font-size:11px;color:#B8B8CC;">' + item.date + '</span>';
+      html += '</div>';
+    }
+  }
+
+  if (items.length === 0) {
+    html = '<div style="color:#B8B8CC;font-size:13px;padding:8px 0;">未识别到支出项，可以手动添加</div>';
+  }
+
+  var summary = '识别到 ' + items.length + ' 项，其中 ' + skippedCount + ' 项为交通支出将被剔除';
+  if (refundCount > 0) summary += '，' + refundCount + ' 项部分退款已标注';
+
+  html = '<div style="margin-top:8px;color:#9E9EB3;font-size:12px;">' + summary + '</div>' + html;
+  document.getElementById('parsedPreview').innerHTML = html;
+}
+
+// ==================== 确认导入 ====================
+function confirmImport() {
+  var importedCount = 0;
+  for (var i = 0; i < lastParsedItems.length; i++) {
+    var item = lastParsedItems[i];
+    var transport = matchTransport(item.merchant);
+    if (transport) {
+      DB.skipped.push({
+        id: item.id, merchant: item.merchant, amount: item.amount, reason: transport
+      });
+    } else {
+      DB.expenses.push({
+        id: item.id, merchant: cleanMerchantName(item.merchant) || item.merchant, amount: item.amount,
+        date: item.date || '', source: 'ocr', refundStatus: item.refundStatus || null
+      });
+      importedCount++;
+    }
+  }
+  saveData();
+  renderAll();
+  lastParsedItems = [];
+  document.getElementById('ocrResult').classList.remove('active');
+  document.getElementById('rawText').textContent = '';
+  document.getElementById('parsedPreview').innerHTML = '';
+  showToast('已导入 ' + importedCount + ' 项支出');
+}
+
+function cancelImport() {
+  lastParsedItems = [];
+  document.getElementById('ocrResult').classList.remove('active');
+  document.getElementById('rawText').textContent = '';
+  document.getElementById('parsedPreview').innerHTML = '';
+  showToast('已取消');
+}
+
+// ==================== 手动添加 ====================
+function toggleManualAdd() {
+  document.getElementById('manualAddForm').classList.toggle('active');
+}
+
+function manualAdd() {
+  var merchant = document.getElementById('manualMerchant').value.trim();
+  var amountStr = document.getElementById('manualAmount').value.trim();
+  var dateRaw = document.getElementById('manualDate').value.trim();
+
+  if (!merchant) { showToast('请输入商户名称'); return; }
+  var amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) { showToast('请输入有效金额'); return; }
+
+  // 日期格式转换：2026-08-16 → 8月16日
+  var date = dateRaw;
+  if (dateRaw) {
+    var dm = dateRaw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (dm) {
+      date = parseInt(dm[2], 10) + '月' + parseInt(dm[3], 10) + '日';
+    }
+  }
+
+  DB.expenses.push({
+    id: Date.now(), merchant: merchant, amount: amount,
+    date: date || '', source: 'manual'
+  });
+  showToast('已添加');
+  saveData();
+  renderAll();
+  document.getElementById('manualMerchant').value = '';
+  document.getElementById('manualAmount').value = '';
+  document.getElementById('manualDate').value = '';
+  document.getElementById('manualAddForm').classList.remove('active');
+}
+
+// ==================== 金额排序 ====================
+function toggleSort() {
+  if (sortOrder === null || sortOrder === 'asc') {
+    sortOrder = 'desc';
+  } else {
+    sortOrder = 'asc';
+  }
+  updateSortBtn();
+  renderExpenses();
+}
+
+function updateSortBtn() {
+  var btn = document.getElementById('sortBtn');
+  if (sortOrder === 'desc') {
+    btn.textContent = '金额 \u2193';
+    btn.style.color = '#FFF';
+    btn.style.background = 'var(--primary)';
+    btn.style.borderColor = 'var(--primary)';
+  } else if (sortOrder === 'asc') {
+    btn.textContent = '金额 \u2191';
+    btn.style.color = '#FFF';
+    btn.style.background = 'var(--primary)';
+    btn.style.borderColor = 'var(--primary)';
+  } else {
+    btn.textContent = '金额排序';
+    btn.style.color = 'var(--primary)';
+    btn.style.background = 'var(--card-bg)';
+    btn.style.borderColor = 'var(--primary-light)';
+  }
+}
+
+function getSortedExpenses() {
+  if (sortOrder === null) return DB.expenses;
+  var sorted = DB.expenses.slice();
+  if (sortOrder === 'desc') {
+    sorted.sort(function(a, b) { return b.amount - a.amount; });
+  } else {
+    sorted.sort(function(a, b) { return a.amount - b.amount; });
+  }
+  return sorted;
+}
+
+// ==================== 列表渲染 ====================
+function renderAll() {
+  renderExpenses();
+  renderStats();
+  renderSkipped();
+}
+
+function renderExpenses() {
+  var container = document.getElementById('expenseList');
+  if (DB.expenses.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>暂无支出记录</p><p style="font-size:11px;margin-top:4px;color:#B8B8CC;">上传账单图片或手动添加</p></div>';
+    return;
+  }
+
+  var displayList = getSortedExpenses();
+  var html = '';
+  for (var i = 0; i < displayList.length; i++) {
+    var item = displayList[i];
+    if (item.editing) {
+      html += '<div class="expense-item editing">';
+      html += '<div class="info">';
+      html += '<input class="edit-input" id="edit_m_' + item.id + '" value="' + escapeHtml(item.merchant) + '" placeholder="商户">';
+      html += '<input class="edit-input" id="edit_a_' + item.id + '" value="' + item.amount + '" placeholder="金额" type="number" step="0.01">';
+      html += '<input class="edit-input" id="edit_d_' + item.id + '" value="' + escapeHtml(item.date) + '" placeholder="消费时间" style="margin-top:4px">';
+      html += '</div>';
+      html += '<div class="actions">';
+      html += '<button class="btn-edit" onclick="saveEdit(' + item.id + ')">✓</button>';
+      html += '<button class="btn-del" onclick="cancelEdit(' + item.id + ')">✕</button>';
+      html += '</div>';
+      html += '</div>';
+    } else {
+      html += '<div class="expense-item">';
+      html += '<div class="info">';
+      html += '<div class="merchant">' + escapeHtml(item.merchant) + '</div>';
+      html += '<div class="meta">';
+      if (item.date) html += '<span style="color:var(--primary);font-weight:500;">' + escapeHtml(item.date) + '</span>';
+      html += '<span>' + (item.source === 'ocr' ? 'OCR识别' : '手动') + '</span>';
+      if (item.refundStatus === 'partial') {
+        html += '<span class="tag-refund">部分退款</span>';
+      }
+      html += '</div>';
+      html += '</div>';
+      html += '<div class="amount">¥' + item.amount.toFixed(2) + '</div>';
+      html += '<div class="actions">';
+      html += '<button class="btn-edit" onclick="startEdit(' + item.id + ')">✎</button>';
+      html += '<button class="btn-del" onclick="deleteItem(' + item.id + ')">✕</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+  }
+  container.innerHTML = html;
+}
+
+function renderStats() {
+  var total = 0;
+  for (var i = 0; i < DB.expenses.length; i++) {
+    total += DB.expenses[i].amount;
+  }
+  document.getElementById('totalAmount').textContent = '¥' + total.toFixed(2);
+  document.getElementById('statCount').textContent = DB.expenses.length;
+  document.getElementById('statAvg').textContent = DB.expenses.length > 0 ? (total / DB.expenses.length).toFixed(2) : '0.00';
+  document.getElementById('statSkipped').textContent = DB.skipped.length;
+
+  document.getElementById('listCount').textContent = DB.expenses.length > 0 ? DB.expenses.length + ' 笔' : '';
+
+  var toggleEl = document.getElementById('toggleSkipped');
+  if (DB.skipped.length > 0) {
+    toggleEl.style.display = 'block';
+  } else {
+    toggleEl.style.display = 'none';
+    document.getElementById('skippedList').classList.remove('active');
+  }
+
+  var saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.style.display = DB.expenses.length > 0 ? 'flex' : 'none';
+  }
+}
+
+function renderSkipped() {
+  var container = document.getElementById('skippedList');
+  if (DB.skipped.length === 0) { container.innerHTML = ''; return; }
+  var html = '';
+  for (var i = 0; i < DB.skipped.length; i++) {
+    var item = DB.skipped[i];
+    html += '<div class="skipped-item">';
+    html += '<span>' + escapeHtml(item.merchant) + ' ¥' + item.amount.toFixed(2) + '</span>';
+    html += '<span class="reason">' + item.reason + '</span>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function toggleSkippedList() {
+  document.getElementById('skippedList').classList.toggle('active');
+}
+
+// ==================== 编辑/删除 ====================
+function startEdit(id) {
+  for (var i = 0; i < DB.expenses.length; i++) {
+    DB.expenses[i].editing = (DB.expenses[i].id === id);
+  }
+  renderExpenses();
+}
+
+function saveEdit(id) {
+  var merchant = document.getElementById('edit_m_' + id).value.trim();
+  var amountStr = document.getElementById('edit_a_' + id).value.trim();
+  var date = document.getElementById('edit_d_' + id).value.trim();
+
+  if (!merchant) { showToast('商户名不能为空'); return; }
+  var amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) { showToast('金额无效'); return; }
+
+  for (var i = 0; i < DB.expenses.length; i++) {
+    if (DB.expenses[i].id === id) {
+      DB.expenses[i].merchant = merchant;
+      DB.expenses[i].amount = amount;
+      DB.expenses[i].date = date;
+      DB.expenses[i].editing = false;
+      break;
+    }
+  }
+  saveData();
+  renderAll();
+}
+
+function cancelEdit(id) {
+  for (var i = 0; i < DB.expenses.length; i++) {
+    if (DB.expenses[i].id === id) DB.expenses[i].editing = false;
+  }
+  renderExpenses();
+}
+
+function deleteItem(id) {
+  for (var i = 0; i < DB.expenses.length; i++) {
+    if (DB.expenses[i].id === id) { DB.expenses.splice(i, 1); break; }
+  }
+  saveData();
+  renderAll();
+  showToast('已删除');
+}
+
+// ==================== 数据存储（即用即走，不持久化） ====================
+function saveData() {}
+function loadData() {}
+try { localStorage.removeItem('expense_tracker_data'); } catch(e) {}
+
+// ==================== 工具函数 ====================
+function showToast(msg) {
+  var toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(function() { toast.classList.remove('show'); }, 2000);
+}
+
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+// 页面清理
+function cleanupOnExit() {
+  if (ocrWorker) { try { ocrWorker.terminate(); } catch(e) {} ocrWorker = null; }
+  lastParsedItems = null;
+  cleanupOcrImage();
+  DB.expenses = [];
+  DB.skipped = [];
+  try { localStorage.removeItem('expense_tracker_data'); } catch(e) {}
+}
+
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) cleanupOcrImage();
+});
+window.addEventListener('beforeunload', function() { cleanupOnExit(); });
+window.addEventListener('pagehide', function() { cleanupOnExit(); });
+
+// ==================== 保存账单为图片 ====================
+function saveAsImage() {
+  if (DB.expenses.length === 0) { showToast('暂无支出记录，无法保存'); return; }
+
+  var btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.textContent = '生成中...';
+
+  var total = 0;
+  for (var i = 0; i < DB.expenses.length; i++) total += DB.expenses[i].amount;
+
+  var captureDiv = document.createElement('div');
+  captureDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:400px;background:#F5F6FA;padding:20px;font-family:sans-serif;';
+
+  var html = '';
+  // 标题卡
+  html += '<div style="background:linear-gradient(135deg,#6C63FF,#8B80FF);color:white;padding:18px;border-radius:14px;margin-bottom:14px;">';
+  html += '<div style="font-size:16px;font-weight:700;letter-spacing:1px;">记账本</div>';
+  html += '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:flex-end;">';
+  html += '<div><div style="font-size:11px;opacity:0.8;">总支出</div>';
+  html += '<div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;">¥' + total.toFixed(2) + '</div></div>';
+  html += '<div style="text-align:right;font-size:11px;opacity:0.8;">' + DB.expenses.length + ' 笔<br>' + new Date().toLocaleDateString() + '</div>';
+  html += '</div></div>';
+
+  // 支出明细（按当前排序显示）
+  var displayList = getSortedExpenses();
+  for (var i = 0; i < displayList.length; i++) {
+    var item = displayList[i];
+    html += '<div style="display:flex;align-items:center;background:white;border-radius:10px;padding:13px 16px;margin-bottom:7px;box-shadow:0 2px 8px rgba(108,99,255,0.06);">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="font-size:14px;font-weight:600;color:#2D2D3F;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(item.merchant) + '</div>';
+    html += '<div style="font-size:11px;color:#B8B8CC;margin-top:3px;display:flex;gap:8px;align-items:center;">';
+    if (item.date) html += '<span style="color:#6C63FF;font-weight:500;white-space:nowrap;">' + escapeHtml(item.date) + '</span>';
+    html += '<span style="white-space:nowrap;">' + (item.source === 'ocr' ? 'OCR识别' : '手动') + '</span>';
+    if (item.refundStatus === 'partial') html += '<span style="color:#FF9800;background:#FFF8E1;padding:1px 6px;border-radius:4px;font-size:10px;">部分退款</span>';
+    html += '</div></div>';
+    html += '<div style="font-size:16px;font-weight:700;color:#2D2D3F;">¥' + item.amount.toFixed(2) + '</div>';
+    html += '</div>';
+  }
+
+  // 已剔除交通
+  if (DB.skipped.length > 0) {
+    html += '<div style="margin-top:12px;padding:14px;background:#FFF8E1;border-radius:10px;">';
+    html += '<div style="font-size:12px;color:#9E9EB3;margin-bottom:8px;">已剔除交通支出 (' + DB.skipped.length + ' 项)</div>';
+    for (var i = 0; i < DB.skipped.length; i++) {
+      var s = DB.skipped[i];
+      html += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#9E9EB3;">';
+      html += '<span>' + escapeHtml(s.merchant) + '</span>';
+      html += '<span>¥' + s.amount.toFixed(2) + ' <span style="color:#FF6584;background:#FFE0E8;padding:2px 8px;border-radius:4px;font-size:10px;">' + s.reason + '</span></span>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '<div style="text-align:center;margin-top:16px;font-size:11px;color:#B8B8CC;">本地记账本 · 数据不出设备</div>';
+
+  captureDiv.innerHTML = html;
+  document.body.appendChild(captureDiv);
+
+  html2canvas(captureDiv, { scale: 2, backgroundColor: '#F5F6FA', useCORS: true }).then(function(canvas) {
+    var dataUrl = canvas.toDataURL('image/png');
+    var link = document.createElement('a');
+    link.download = '记账本_' + new Date().toISOString().slice(0, 10) + '.png';
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    document.body.removeChild(captureDiv);
+    captureDiv = null;
+    showToast('账单图片已保存');
+    btn.disabled = false;
+    btn.textContent = '保存账单';
+  }).catch(function(err) {
+    console.error('截图失败', err);
+    showToast('保存失败，请重试');
+    document.body.removeChild(captureDiv);
+    captureDiv = null;
+    btn.disabled = false;
+    btn.textContent = '保存账单';
+  });
+}
+
+// ==================== 初始化 ====================
+document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+loadData();
+renderAll();
+
+// 注册 Service Worker（支持离线缓存）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(err) {
+      console.warn('Service Worker 注册失败（不影响正常使用）', err);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
